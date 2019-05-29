@@ -1,0 +1,476 @@
+---
+title: "Session 9: Measurement Practicum Example"
+subsubtitle: "ESM 228: Monitoring & Evaluation"
+author: "Mark Buntaine"
+output: html_document
+header-includes:
+- \usepackage{caption}
+- \captionsetup[figure]{labelformat=empty}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r load, echo=FALSE}
+# Load the required packages
+library(DeclareDesign)
+library(knitr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(dplyr)
+library(kableExtra)
+```
+
+## WWF Strategic Plan for Nepal 2017-2021 Theory of Change
+
+
+## Measurement Goal & Measure
+
+**Goal**: Estimate the numbers of tigers remaining in the Terai Arc landscape in Nepal.
+
+## Source & Rationale & Unit
+
+*Source*: A combined team of researchers from WWF and local park rangers can set up the camera traps. The WWF team can make sure the study is conducted according to their standards, while the park rangers have essential local knowledge about where to place traps for maximum efficacy.
+
+*Rationale*: The most cost-effective and efficient way to estimate species presence for a dangerous and nocturnal animal is through the use of camera traps.
+
+*Unit*: Parcels of land that are 25 mi^2^
+
+
+## Responsibility & Frequency
+
+*Responsibility*: WWF will coordinate with park rangers.
+
+*Frequency*: I would suggest the survey is conducted every four years. Because it takes 3-4 months to conduct the survey, it's not feasible to conduct it very often. Furthermore, as strategic planning for Nepal is renewed every four years, testing every four years gives us a baseline measure and a post-treatment measure.
+
+
+## Declaring the population
+
+According to last count of rhinos conducted.
+
+Landing site       Approximate vessels per month
+-----------        -----------------------------
+General Santos      700
+Navotas             670
+Iloilo              150
+Lucena              140
+Zamboanga           40
+Davao               30
+Sual                8
+
+
+## Target Population & Challenges
+
+*Target Population*: Tiger habitat within the Terai Arc landscape.
+
+*Challenge of drawing a representative sample*: Camera traps can't cover the entire landscape, and so we need to put them in places where they are most likely to capture the tigers. Furthermore tigers are very territorial and generally live alone (unless it's a mother and cubs) so they are widely spread in the landscape.
+
+*Sampling procedure*: Sampling at different locations in the landscape.
+
+## DeclareDesign()
+
+```{r pop}
+set.seed(232)
+population <- declare_population(
+  port = add_level(N=7,
+         baseline=c(0.6,0.6,0.4,0.4,0.1,0.1,0.1)),
+  captain = add_level(N=c(700,670,150,140,40,30,8),
+                      know=draw_binary(baseline))
+)
+pop <- population()
+pop.vector <- c(700,670,150,140,40,30,8)
+
+my_estimand <- declare_estimands(mean(know),
+                                 label = "Ybar")
+```
+
+## DeclareDesign()
+
+```{r report-samp}
+reporting <- declare_assignment(prob=0.8,
+                  assignment_variable = "R")
+
+sampling <- declare_sampling(strata=port,
+               strata_n=c(80,80,80,80,8,8,8))
+```
+
+## DeclareDesign()
+
+```{r declare-estimator}
+
+strata_weighted_mean <- function(data){
+  data.frame(  
+  estimator_label = "strata_w_mean",
+  estimand_label = "Ybar",
+  n = nrow(data),
+  stringsAsFactors = FALSE,
+  
+  estimate = data %>% filter(R==1) %>%
+    group_by(port) %>% 
+    summarise(mean=mean(know)) %>%
+    mutate(prop=pop.vector/sum(pop.vector)) %>%
+    mutate(sub.mean=mean*prop) %>% pull(sub.mean) %>% 
+    sum())
+} #just use this function, custom
+
+```
+
+## DeclareDesign()
+
+```{r diagnosis, cache=TRUE}
+
+answer <- declare_estimator(
+  handler = tidy_estimator(strata_weighted_mean),
+  estimand = my_estimand)
+
+design <- population + my_estimand + reporting +
+          sampling + answer
+diagnosis <- diagnose_design(design, sims = 100)
+
+diagnosis$diagnosands_df[,c(4,5,12,14)] %>%
+  kable()
+
+```
+
+
+
+## Measurement Goal & Measure
+
+**Goal**: Assess the level of knowledge about livestock insurance schemes near snow leopard habitats.
+
+“If your neighbor’s livestock was killed by snow leopards, what are his/her options for dealing with that loss?”
+
+
+## Source & Rationale & Unit
+
+*Source*: Independent survey firm sampling from households located in districts with high levels of snow leopard presence (Dolpa, Humla, Mugu, Mustang).
+
+*Rationale*: The best way to test whether locals are aware of livestock insurance schemes is to ask them what their neighbors options are for responding to killing of livestock. By asking this open-endedly we don’t provide the answer and thus avoid a leading question, and by asking about the individual’s neighbor, we remove possible response bias. The individual may be more willing to say their neighbor would commit retaliatory killing than admitting that would be an option for themselves, and we still get at whether there is knowledge of the local program to receive compensation for livestock loss.
+
+*Unit*: Individual survey respondent from each household.
+
+
+## Responsibility & Frequency
+
+*Responsibility*: WWF will help fund the survey, but will hire an independent survey firm since locals may be wary or giving sensitive information to government officials or WWF staff, and that may bias their responses.
+
+*Frequency*: I would suggest the survey is conducted annually to continually assess knowledge of livestock insurance schemes. It takes time for people to learn about available programs and so surveying more often than this may be a waste of resources.
+
+
+## Declaring the population
+
+Using WWF data, I found the districts that are most prominent in terms of snow leopard populations. I then obtained the population count per district from the Nepalese government.
+
+District        Population
+--------        -----------
+Mugu            55,286
+Humla           50,858
+Dolpa           36,700
+Mustang         13,452
+
+
+
+## Target Population & Challenges
+
+*Target Population*: Humans who may possibly have encounters with snow leopards based on proximity to their habitat.
+
+*Challenge of drawing a representative sample*: Sampling effort must be done in district clusters, but clusters are of unequal size. It's also likely that some households are much closer to the snow leopard habitat than others.
+
+*Sampling procedure*: Cluster-based sampling at districts with unequal effort according to potential sample size.
+
+## DeclareDesign()
+
+```{r pop}
+set.seed(22)
+population <- declare_population(
+  district = add_level(N=4,
+         baseline=c(0.8,0.8,0.6,0.4)), #I'm estimating that knowledge of these programs is higher in the larger districts than the smaller districts.
+  Population = add_level(N=c(55286,50858,36700,13452),
+                      know=draw_binary(baseline))
+)
+pop <- population()
+pop.vector <- c(55286,50858,36700,13452)
+
+my_estimand <- declare_estimands(mean(know),
+                                 label = "Ybar")
+```
+
+## DeclareDesign()
+
+```{r report-samp}
+reporting <- declare_assignment(prob=0.8,
+                  assignment_variable = "R")
+
+sampling <- declare_sampling(strata=district,
+               strata_n=c(550,500,360,130))
+```
+
+## DeclareDesign()
+
+```{r declare-estimator}
+
+strata_weighted_mean <- function(data){
+  data.frame(  
+  estimator_label = "strata_w_mean",
+  estimand_label = "Ybar",
+  n = nrow(data),
+  stringsAsFactors = FALSE,
+  
+  estimate = data %>% filter(R==1) %>%
+    group_by(district) %>% 
+    summarise(mean=mean(know)) %>%
+    mutate(prop=pop.vector/sum(pop.vector)) %>%
+    mutate(sub.mean=mean*prop) %>% pull(sub.mean) %>% 
+    sum())
+} #mark said just use this function, he created it custom
+
+```
+
+## DeclareDesign()
+
+```{r diagnosis, cache=TRUE}
+
+answer <- declare_estimator(
+  handler = tidy_estimator(strata_weighted_mean),
+  estimand = my_estimand)
+
+design <- population + my_estimand + reporting +
+          sampling + answer
+diagnosis <- diagnose_design(design, sims = 100)
+
+diagnosis$diagnosands_df[,c(4,5,12,14)] %>%
+  kable()
+
+```
+
+-------------------------
+
+
+## Measurement Goal & Measure
+
+**Goal**: Assess functionality of livestock insurance schemes near snow leopard habitats in terms of number of retaliatory killings.
+
+*Randomized response technique:* fixed-unfixed answer
+Please shake the dice without letting anyone see what they land on. 
+Add the two numbers together on the dice, and respond as follows:
+-2, 3, 4 - respond “yes”
+-5, 6, 7, 8, 9, 10 - respond truthfully to the question
+-11, 12 - respond “no”
+
+“In the last 12 months did you kill any snow leopards due to loss of livestock?”
+
+
+## Source & Rationale & Unit
+
+*Source*: Independent survey firm sampling from households located in districts with high levels of snow leopard presence (Dolpa, Humla, Mugu, Mustang).
+
+*Rationale*: The best way to test whether livestock insurance schemes are functional is to ascertain whether snow leopards are still being killed in retaliation for loss of livestock. By using the fixed-unfixed answer technique we remove some social desirability bias.
+
+*Unit*: Individual survey respondent from each household.
+
+
+## Responsibility & Frequency
+
+*Responsibility*: WWF will help fund the survey, but will hire an independent survey firm since locals may be wary or giving sensitive information to government officials or WWF staff, and that may bias their responses.
+
+*Frequency*: The survey should be conducted annually to continually assess the functionality of livestock insurance schemes, so that if they are found not to be effective WWF doesn’t waste too many years funding them.
+
+
+## Declaring the population
+
+Using WWF data, I found the districts that are most prominent in terms of snow leopard populations. I then obtained the population count per district from the Nepalese government.
+
+District        Population
+--------        -----------
+Mugu            55,286
+Humla           50,858
+Dolpa           36,700
+Mustang         13,452
+
+
+
+## Target Population & Challenges
+
+*Target Population*: Humans who may possibly have encounters with snow leopards based on proximity to their habitat.
+
+*Challenge of drawing a representative sample*: Sampling effort must be done in district clusters, but clusters are of unequal size. It's also likely that some households are much closer to the snow leopard habitat than others.
+
+*Sampling procedure*: Cluster-based sampling at districts with unequal effort according to potential sample size.
+
+## DeclareDesign()
+
+```{r pop}
+set.seed(22)
+population <- declare_population(
+  district = add_level(N=4,
+         baseline=c(0.02,0.02,0.04,0.05)), #Retaliations have been relatively low, but I think it is likely that they are higher in the districts where snow leopards are most prevalent.
+  Population = add_level(N=c(55286,50858,36700,13452),
+                      retaliation=draw_binary(baseline))
+)
+pop <- population()
+pop.vector <- c(55286,50858,36700,13452)
+
+my_estimand <- declare_estimands(mean(retaliation),
+                                 label = "Ybar")
+```
+
+## DeclareDesign()
+
+```{r report-samp}
+reporting <- declare_assignment(prob=0.8,
+                  assignment_variable = "R")
+
+sampling <- declare_sampling(strata=district,
+               strata_n=c(550,500,360,130))
+```
+
+## DeclareDesign()
+
+```{r declare-estimator}
+
+strata_weighted_mean <- function(data){
+  data.frame(  
+  estimator_label = "strata_w_mean",
+  estimand_label = "Ybar",
+  n = nrow(data),
+  stringsAsFactors = FALSE,
+  
+  estimate = data %>% filter(R==1) %>%
+    group_by(district) %>% 
+    summarise(mean=mean(retaliation)) %>%
+    mutate(prop=pop.vector/sum(pop.vector)) %>%
+    mutate(sub.mean=mean*prop) %>% pull(sub.mean) %>% 
+    sum())
+} #mark said just use this function, he created it custom
+
+```
+
+## DeclareDesign()
+
+```{r diagnosis, cache=TRUE}
+
+answer <- declare_estimator(
+  handler = tidy_estimator(strata_weighted_mean),
+  estimand = my_estimand)
+
+design <- population + my_estimand + reporting +
+          sampling + answer
+diagnosis <- diagnose_design(design, sims = 100)
+
+diagnosis$diagnosands_df[,c(4,5,12,14)] %>%
+  kable()
+
+```
+
+-------------------------
+
+**Goal 6**: Assess the total number of households in Nepal that benefit directly from wildlife conservation initiatives.
+
+"Are you or other members of your household currently receiving a direct benefit from a wildlife conservation initiative?"
+1. Yes
+2. No
+
+
+## Source & Rationale & Unit
+
+*Source*: Independent survey firm sampling from households, clustered and stratified by size of town and socio-economic status of inhabitants.
+
+*Rationale*: The best way to test whether households receive a direct benefit from wildlife conservation initiatives is to ask them directly.
+
+*Unit*: Individual survey respondent from each household.
+
+
+## Responsibility & Frequency
+
+*Responsibility*: WWF will help fund the survey, but will hire an independent survey firm since locals may be wary or giving sensitive information to government officials or WWF staff, and that may bias their responses.
+
+*Frequency*: Annual surveys allow us to track whether benefits are being received each year by households. Surveying more often is more expensive and benefits take time to accrue, while surveying late means we may encounter recall bias.
+
+
+## Declaring the population
+
+The population of Nepal
+
+District        Population
+--------        -----------
+Mugu            55,286
+Humla           50,858
+Dolpa           36,700
+Mustang         13,452
+
+
+
+## Target Population & Challenges
+
+*Target Population*: Humans who may possibly have encounters with snow leopards based on proximity to their habitat.
+
+*Challenge of drawing a representative sample*: Sampling effort must be done in district clusters, but clusters are of unequal size. It's also likely that some households are much closer to the snow leopard habitat than others.
+
+*Sampling procedure*: Cluster-based sampling at districts with unequal effort according to potential sample size.
+
+## DeclareDesign()
+
+```{r pop}
+set.seed(22)
+population <- declare_population(
+  district = add_level(N=4,
+         baseline=c(0.8,0.8,0.6,0.4)),
+  Population = add_level(N=c(55286,50858,36700,13452),
+                      benefit=draw_binary(baseline))
+)
+pop <- population()
+pop.vector <- c(55286,50858,36700,13452)
+
+my_estimand <- declare_estimands(mean(benefit),
+                                 label = "Ybar")
+```
+
+## DeclareDesign()
+
+```{r report-samp}
+reporting <- declare_assignment(prob=0.8,
+                  assignment_variable = "R")
+
+sampling <- declare_sampling(strata=district,
+               strata_n=c(550,500,360,130))
+```
+
+## DeclareDesign()
+
+```{r declare-estimator}
+
+strata_weighted_mean <- function(data){
+  data.frame(  
+  estimator_label = "strata_w_mean",
+  estimand_label = "Ybar",
+  n = nrow(data),
+  stringsAsFactors = FALSE,
+  
+  estimate = data %>% filter(R==1) %>%
+    group_by(district) %>% 
+    summarise(mean=mean(benefit)) %>%
+    mutate(prop=pop.vector/sum(pop.vector)) %>%
+    mutate(sub.mean=mean*prop) %>% pull(sub.mean) %>% 
+    sum())
+} #mark said just use this function, he created it custom
+
+```
+
+## DeclareDesign()
+
+```{r diagnosis, cache=TRUE}
+
+answer <- declare_estimator(
+  handler = tidy_estimator(strata_weighted_mean),
+  estimand = my_estimand)
+
+design <- population + my_estimand + reporting +
+          sampling + answer
+diagnosis <- diagnose_design(design, sims = 100)
+
+diagnosis$diagnosands_df[,c(4,5,12,14)] %>%
+  kable()
+
+```

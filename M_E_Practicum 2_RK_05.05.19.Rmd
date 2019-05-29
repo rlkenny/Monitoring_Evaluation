@@ -1,0 +1,369 @@
+---
+title: 'Monitoring and Evaluation Practicum 2'
+author: "Rachel Kenny"
+output:
+  pdf_document: default
+  html_document: default
+subsubtitle: 'ESM 228: Monitoring & Evaluation'
+header-includes:
+- \usepackage{caption}
+- \captionsetup[figure]{labelformat=empty}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r load, echo=FALSE}
+# Load the required packages
+library(DeclareDesign)
+library(knitr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(dplyr)
+library(kableExtra)
+```
+
+## WWF Strategic Plan for Nepal 2017-2021 Theory of Change
+http://d2ouvy59p0dg6k.cloudfront.net/downloads/wwf_nepal_strategic_plan__2017_2021_.pdf
+
+**Goal:** By 2021, Nepal’s most threatened and ecologically, economically and culturally important species are secured in the wild. 
+
+## Measurement Goal & Measure
+
+**Goal**: Assess the level of knowledge about livestock insurance schemes near snow leopard habitats.
+
+“If your neighbor’s livestock was killed by snow leopards, what are his/her options for dealing with that loss?”
+
+If they respond with any knowledge of livestock insurance schemes, they get a "1". If they respond without any knowledge of livestock insurance schemes they get a "0".
+
+
+## Source & Rationale & Unit
+
+*Source*: Independent survey firm sampling from households located in districts with high levels of snow leopard presence (Dolpa, Humla, Mugu, Mustang).
+
+*Rationale*: The best way to test whether locals are aware of livestock insurance schemes is to ask them what their neighbors options are for responding to killing of livestock. By asking this open-endedly we don’t provide the answer and thus avoid a leading question, and by asking about the individual’s neighbor, we remove possible response bias. The individual may be more willing to say their neighbor would commit retaliatory killing than admitting that would be an option for themselves, and we still get at whether there is knowledge of the local program to receive compensation for livestock loss.
+
+*Unit*: Individual survey respondent from each household.
+
+
+## Responsibility & Frequency
+
+*Responsibility*: WWF will help fund the survey, but will hire an independent survey firm since locals may be wary or giving sensitive information to government officials or WWF staff, and that may bias their responses.
+
+*Frequency*: I would suggest the survey is conducted annually to continually assess knowledge of livestock insurance schemes. It takes time for people to learn about available programs and so surveying more often than this may be a waste of resources.
+
+
+## Declaring the population
+
+Using WWF data, I found the districts that are most prominent in terms of snow leopard populations. I then obtained the population count per district from the Nepalese government.
+
+District        Population
+--------        -----------
+Mugu            55,286
+Humla           50,858
+Dolpa           36,700
+Mustang         13,452
+
+
+
+## Target Population & Challenges
+
+*Target Population*: Humans who may possibly have encounters with snow leopards based on proximity to their habitat.
+
+*Challenge of drawing a representative sample*: Sampling effort must be done in district clusters, but clusters are of unequal size. It's also likely that some households are much more likely to come into contact with snow leopard habitat than others, as only some households have livestock or are near enough to snow leopard territory.
+
+*Sampling procedure*: Cluster-based sampling at districts with unequal effort according to potential sample size.
+
+## DeclareDesign()
+
+```{r pop}
+set.seed(22)
+population <- declare_population(
+  district = add_level(N=4,
+         baseline=c(0.8,0.8,0.6,0.4)), #I'm estimating that knowledge of these programs is higher in the larger districts than the smaller districts.
+  Population = add_level(N=c(55286,50858,36700,13452),
+                      know=draw_binary(baseline))
+)
+pop <- population()
+pop.vector <- c(55286,50858,36700,13452)
+
+my_estimand <- declare_estimands(mean(know),
+                                 label = "Ybar")
+```
+
+## DeclareDesign()
+
+```{r report-samp}
+reporting <- declare_assignment(prob=0.9, #I'm assuming a low level of differential reporting based on strata
+                  assignment_variable = "R")
+
+sampling <- declare_sampling(strata=district,
+               strata_n=c(550,500,360,130))
+```
+
+## DeclareDesign()
+
+```{r declare-estimator}
+
+strata_weighted_mean <- function(data){
+  data.frame(  
+  estimator_label = "strata_w_mean",
+  estimand_label = "Ybar",
+  n = nrow(data),
+  stringsAsFactors = FALSE,
+  
+  estimate = data %>% filter(R==1) %>%
+    group_by(district) %>% 
+    summarise(mean=mean(know)) %>%
+    mutate(prop=pop.vector/sum(pop.vector)) %>%
+    mutate(sub.mean=mean*prop) %>% pull(sub.mean) %>% 
+    sum())
+} 
+
+```
+
+## DeclareDesign()
+
+```{r diagnosis, cache=TRUE}
+
+answer <- declare_estimator(
+  handler = tidy_estimator(strata_weighted_mean),
+  estimand = my_estimand)
+
+design <- population + my_estimand + reporting +
+          sampling + answer
+diagnosis <- diagnose_design(design, sims = 100) #note that I reduced the number of simulations due to lack of power on my home laptop, my r kept stalling
+
+diagnosis$diagnosands_df[,c(4,5,12,14)] %>%
+  kable()
+
+```
+
+-------------------------
+
+
+## Measurement Goal & Measure
+
+**Goal**: Assess functionality of livestock insurance schemes near snow leopard habitats in terms of number of retaliatory killings.
+
+*Randomized response technique:* fixed-unfixed answer
+Please shake the dice without letting anyone see what they land on. 
+Add the two numbers together on the dice, and respond as follows:
+-2, 3, 4 - respond “yes”
+-5, 6, 7, 8, 9, 10 - respond truthfully to the question
+-11, 12 - respond “no”
+
+“In the last 12 months did you kill any snow leopards due to loss of livestock?”
+
+
+## Source & Rationale & Unit
+
+*Source*: Independent survey firm sampling from households located in districts with high levels of snow leopard presence (Dolpa, Humla, Mugu, Mustang).
+
+*Rationale*: The best way to test whether livestock insurance schemes are functional is to ascertain whether snow leopards are still being killed in retaliation for loss of livestock. By using the fixed-unfixed answer technique we remove some social desirability bias.
+
+*Unit*: Individual survey respondent from each household.
+
+
+## Responsibility & Frequency
+
+*Responsibility*: WWF will help fund the survey, but will hire an independent survey firm since locals may be wary or giving sensitive information to government officials or WWF staff, and that may bias their responses.
+
+*Frequency*: The survey should be conducted annually to continually assess the functionality of livestock insurance schemes, so that if they are found not to be effective WWF doesn’t waste too many years funding them.
+
+
+## Declaring the population
+
+Using WWF data, I found the districts that are most prominent in terms of snow leopard populations. I then obtained the population count per district from the Nepalese government.
+
+District        Population
+--------        -----------
+Mugu            55,286
+Humla           50,858
+Dolpa           36,700
+Mustang         13,452
+
+
+
+## Target Population & Challenges
+
+*Target Population*: Humans who may possibly have encounters with snow leopards based on proximity to their habitat.
+
+*Challenge of drawing a representative sample*: Sampling effort must be done in district clusters, but clusters are of unequal size. It's also likely that some households are much closer to the snow leopard habitat than others.
+
+*Sampling procedure*: Cluster-based sampling at districts with unequal effort according to potential sample size.
+
+## DeclareDesign()
+
+```{r pop}
+set.seed(22)
+population <- declare_population(
+  district = add_level(N=4,
+         baseline=c(0.02,0.02,0.04,0.05)), #Retaliations have been relatively low, but I think it is likely that they are higher in the districts where snow leopards are most prevalent.
+  Population = add_level(N=c(55286,50858,36700,13452),
+                      retaliation=draw_binary(baseline))
+)
+pop <- population()
+pop.vector <- c(55286,50858,36700,13452)
+
+my_estimand <- declare_estimands(mean(retaliation),
+                                 label = "Ybar")
+```
+
+## DeclareDesign()
+
+```{r report-samp}
+reporting <- declare_assignment(prob=0.9, #I'm assuming a low level of differential reporting based on strata
+                  assignment_variable = "R")
+
+sampling <- declare_sampling(strata=district,
+               strata_n=c(550,500,360,130))
+```
+
+## DeclareDesign()
+
+```{r declare-estimator}
+
+strata_weighted_mean <- function(data){
+  data.frame(  
+  estimator_label = "strata_w_mean",
+  estimand_label = "Ybar",
+  n = nrow(data),
+  stringsAsFactors = FALSE,
+  
+  estimate = data %>% filter(R==1) %>%
+    group_by(district) %>% 
+    summarise(mean=mean(retaliation)) %>%
+    mutate(prop=pop.vector/sum(pop.vector)) %>%
+    mutate(sub.mean=mean*prop) %>% pull(sub.mean) %>% 
+    sum())
+} 
+
+```
+
+## DeclareDesign()
+
+```{r diagnosis, cache=TRUE}
+
+answer <- declare_estimator(
+  handler = tidy_estimator(strata_weighted_mean),
+  estimand = my_estimand)
+
+design <- population + my_estimand + reporting +
+          sampling + answer
+diagnosis <- diagnose_design(design, sims = 100)
+
+diagnosis$diagnosands_df[,c(4,5,12,14)] %>%
+  kable()
+
+```
+
+-------------------------
+
+
+**Goal 6**: Estimate snow leopard populations with a goal of 300+ by 2021
+
+*Exact measure to be taken:* Sightings of unique snow leopards
+
+## Source & Rationale & Unit
+
+*Source*: WWF researchers with assistance from members of Snow Leopard Conservation Committees (SLCC). SLCCs are established by WWF, and they engage, educate, and train local community members in snow leopard conservation, making them citizen scientists.
+
+*Rationale*: The most cost-effective and efficient way to estimate species presence for a dangerous animal living in difficult to access mountainous regions is through the use of strategically placed camera traps.
+
+*Unit*: Parcels of land within the known districts where snow leopards reside: Dolpa, Humla, Mustang, and Mugu. 103 parcels of land that are 200 km^2^ (total potential habitat is estimated around 20,600km^2^). Keeping cost constraints and ease of access for researchers in mind, especially considering the mountainous location of snow leopard habitat, I suggest sampling about half of the possible parcels in each district (n=51), placing camera traps non-randomly at strategic locations where snow leopards are likely to be spotted, and then using that to extrapolate an estimated population count.
+
+## Responsibility & Frequency
+
+*Responsibility*: WWF will help fund the survey, but will hire an independent survey firm since locals may be wary or giving sensitive information to government officials or WWF staff, and that may bias their responses.
+
+*Frequency*: Annual surveys allow us to track whether benefits are being received each year by households. Surveying more often is more expensive and benefits take time to accrue, while surveying late means we may encounter recall bias.
+
+
+## Declaring the population
+Total population: 460 units of 25mi^2^
+
+District        Area           Parcels (200 km^2^)
+--------        -----------    ---------
+Dolpa           7,889 km^2^    39
+Humla           5,655	km^2^    28
+Mustang         3,573 km^2^    18
+Mugu            3,535	km^2^    18
+
+
+## Target Population & Challenges
+
+*Target Population*: Units of land that may contain snow leopards
+
+*Challenge of drawing a representative sample*: Sampling effort must be done in district clusters, but clusters are of unequal size. It's also likely that some areas are more suitable to snow leopards than others, so placement of cameras will highly affect results and must be done with expert knowledge.
+
+*Sampling procedure*: Cluster-based sampling at districts with unequal effort according to potential sample size.
+
+## DeclareDesign()
+
+```{r pop}
+set.seed(22)
+population <- declare_population(
+  district = add_level(N=4,
+         baseline=c(.9,.8,.6,.6)), #estimated chance of camera trap catching photos of individuals in each area. Likely to be higher in regions with more suitable habitat.
+  parcels = add_level(N=c(39,28,18,18),
+                      prescence=draw_binary(baseline))
+)
+pop <- population()
+pop.vector <- c(39,28,18,18)
+
+my_estimand <- declare_estimands(mean(prescence),
+                                 label = "Ybar")
+```
+
+## DeclareDesign()
+
+```{r report-samp}
+reporting <- declare_assignment(prob=1, # I do not expect differential reporting based on strata, the wildlife cameras employ the same technology and should all be equally effective.
+                  assignment_variable = "R")
+
+sampling <- declare_sampling(strata=district,
+               strata_n=c(20,14,9,9))
+```
+
+## DeclareDesign()
+
+```{r declare-estimator}
+
+strata_weighted_mean <- function(data){
+  data.frame(  
+  estimator_label = "strata_w_mean",
+  estimand_label = "Ybar",
+  n = nrow(data),
+  stringsAsFactors = FALSE,
+  
+  estimate = data %>% filter(R==1) %>%
+    group_by(district) %>% 
+    summarise(mean=mean(prescence)) %>%
+    mutate(prop=pop.vector/sum(pop.vector)) %>%
+    mutate(sub.mean=mean*prop) %>% pull(sub.mean) %>% 
+    sum())
+} 
+
+```
+
+## DeclareDesign()
+
+```{r diagnosis, cache=TRUE}
+
+answer <- declare_estimator(
+  handler = tidy_estimator(strata_weighted_mean),
+  estimand = my_estimand)
+
+design <- population + my_estimand + reporting +
+          sampling + answer
+diagnosis <- diagnose_design(design, sims = 100)
+
+diagnosis$diagnosands_df[,c(4,5,12,14)] %>%
+  kable()
+
+```
+
+
